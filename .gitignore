@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Cloudflare / Wrangler
+.wrangler/
+
+# Vite / Flue build caches
+.vite/
+.flue-vite/
+.flue-vite.wrangler.jsonc
+
+# dev:local config backup (canonical wrangler.jsonc is restored from this)
+.wrangler.jsonc.canonical-bak
+
+# Secrets — never commit. Use `wrangler secret put` for deployed secrets.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# Logs / OS junk
+*.log
+.DS_Store

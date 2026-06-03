@@ -1,0 +1,25 @@
+{
+  "name": "gh-chat-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "flue dev --target cloudflare",
+    "dev:local": "node scripts/dev-local.mjs",
+    "build": "flue build --target cloudflare",
+    "deploy:check": "node scripts/preflight.mjs && flue build --target cloudflare && wrangler deploy --dry-run",
+    "deploy": "node scripts/preflight.mjs && flue build --target cloudflare && wrangler deploy"
+  },
+  "dependencies": {
+    "@flue/runtime": "^0.9.1",
+    "agents": "^0.14.1",
+    "hono": "^4.8.3",
+    "valibot": "^1.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260505.1",
+    "@flue/cli": "^0.9.1",
+    "@flue/sdk": "^0.9.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.87.0"
+  }
+}

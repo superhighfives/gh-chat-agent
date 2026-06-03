@@ -1,0 +1,20 @@
+{
+  "$schema": "https://workers.cloudflare.com/schema/wrangler.json",
+  "name": "gh-chat-agent",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": { "binding": "AI" },
+  // Non-secret AI Gateway slug (Charlie Gleason account). Read in app.ts as
+  // env.AI_GATEWAY_ID to route model traffic through the named gateway. The
+  // secret GITHUB_TOKEN is added separately via `wrangler secret put`.
+  "vars": { "AI_GATEWAY_ID": "gh-chat-agent" },
+  // @flue/cli@0.9.1 generates the agent DO class for `.flue/agents/chat.ts`
+  // using the PascalCase filename directly: `Chat` (verified in
+  // dist/gh_chat_agent/index.js -> `export { Chat, FlueRegistry, ... }` and the
+  // generated durable_objects binding `{ name: "Chat", class_name: "Chat" }`).
+  // FlueRegistry is always required. new_sqlite_classes MUST match the emitted
+  // class names exactly or `wrangler deploy` fails.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "Chat"] }
+  ]
+}
