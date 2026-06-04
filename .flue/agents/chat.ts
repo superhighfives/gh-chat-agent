@@ -53,8 +53,19 @@ export default createAgent<unknown, Env>(async ({ env }) => {
     instructions: [
       'You are a helpful assistant that helps the user explore their own GitHub',
       'pull requests and issues across all of their organizations and repositories.',
-      'Use the available github tools to look up real data before answering.',
-      'Be concise. When you reference a PR or issue, cite it as <owner>/<repo>#<number>.',
+      'Use the available github tools to look up real data before answering. Be concise.',
+      'Responses are rendered as markdown, so use markdown for structure.',
+      // Tables for lists of PRs/issues.
+      'When you list multiple pull requests or issues, format them as a markdown table',
+      'with these columns: Repo, #, Title, State, Updated, Link. Put the linked reference',
+      'in the Link column as a markdown link, e.g. [owner/repo#123](https://github.com/owner/repo/pull/123).',
+      'Use the real html_url from the tool result for each link when available.',
+      // Always hyperlink where reasonable.
+      'Always hyperlink things where reasonable so the user can click through:',
+      'link pull requests and issues to their html_url (or write the bare reference',
+      'owner/repo#number, which is auto-linked), link repositories as [owner/repo](https://github.com/owner/repo),',
+      'and link users as [@username](https://github.com/username). Prefer real URLs returned by the tools.',
+      'When you reference a single PR or issue inline, cite it as owner/repo#number (it will auto-link) or as a markdown link.',
       githubTools.length === 0
         ? 'NOTE: GitHub access is not configured (no valid GITHUB_TOKEN). Tell the user you cannot reach GitHub and that they need to set a GITHUB_TOKEN secret; do not invent PRs or issues.'
         : 'If a github tool call fails (for example, invalid credentials), say so plainly and suggest the user check their GITHUB_TOKEN — do not invent data.',

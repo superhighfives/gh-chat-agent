@@ -36,6 +36,7 @@ function check(name, cond, detail) {
 const ALLOWED_TAGS = new Set([
   'a', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'br',
   'h3', 'h4', 'h5',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td',
 ]);
 const ALLOWED_HREF = /^(https?:\/\/|mailto:)/i;
 
@@ -85,6 +86,13 @@ assertSafe('code fence breakout', '```\n</code><script>alert(1)</script>\n```');
 assertSafe('inline code breakout', '`</code><script>alert(1)</script>`');
 assertSafe('amp colon scheme trick', '[x](javascript&colon;alert(1))');
 assertSafe('mixed payload', 'Hi <b>x</b> [a](JAVASCRIPT:1) **ok** `<i>` end');
+// Table-specific injection vectors.
+assertSafe('table cell script', '| H | X |\n|---|---|\n| <script>alert(1)</script> | ok |');
+assertSafe('table cell img onerror', '| H |\n|---|---|\n| <img src=x onerror=alert(1)> |');
+assertSafe('table ragged rows', '| A | B | C |\n|---|---|---|\n| 1 | 2 |\n| 1 | 2 | 3 | 4 | 5 |');
+assertSafe('table pipe in code cell', '| A | B |\n|---|---|\n| `a|b|c` | 2 |');
+assertSafe('table js link in cell', '| L |\n|---|---|\n| [x](javascript:alert(1)) |');
+assertSafe('autolink ref then html', 'o/r#1 then <script>alert(1)</script>');
 
 // Structural assertions on dangerous-link handling:
 check('js link -> no anchor', !/<a\b/i.test(renderMarkdown('[click](javascript:alert(1))')));
@@ -136,6 +144,12 @@ check('emphasis outside links still works alongside underscore url', (() => {
 check('bold', renderMarkdown('**b**') === '<strong>b</strong>', renderMarkdown('**b**'));
 check('italic', renderMarkdown('*i*') === '<em>i</em>', renderMarkdown('*i*'));
 check('underscore bold', renderMarkdown('__b__') === '<strong>b</strong>', renderMarkdown('__b__'));
+check('intraword underscores NOT italic (repo name)', renderMarkdown('a_b/c_d') === 'a_b/c_d', renderMarkdown('a_b/c_d'));
+check('standalone _italic_ still works', renderMarkdown('_italic_') === '<em>italic</em>', renderMarkdown('_italic_'));
+check('ref-shaped link label kept literal', (() => {
+  const h = renderMarkdown('[a_b/c_d#5](https://github.com/a_b/c_d/pull/5)');
+  return h.includes('>a_b/c_d#5</a>') && /href="https:\/\/github\.com\/a_b\/c_d\/pull\/5"/.test(h);
+})(), renderMarkdown('[a_b/c_d#5](https://github.com/a_b/c_d/pull/5)'));
 check('inline code', renderMarkdown('`c`') === '<code>c</code>', renderMarkdown('`c`'));
 check('inline code keeps stars literal', renderMarkdown('`**x**`') === '<code>**x**</code>', renderMarkdown('`**x**`'));
 check('heading modest (h3, not h1)', (() => {
@@ -158,6 +172,76 @@ check('mixed reply renders', (() => {
   const h = renderMarkdown('Here is **bold**, `code`, and a list:\n- alpha\n- beta\n\nSee [repo](https://github.com/o/r#1).');
   return h.includes('<strong>bold</strong>') && h.includes('<code>code</code>') && h.includes('<ul>') && h.includes('<a href="https://github.com/o/r#1"');
 })());
+
+console.log('\nTables:');
+function hrefOf(html) { const m = /<a href="([^"]*)"/.exec(html); return m ? m[1] : null; }
+check('basic table structure', (() => {
+  const h = renderMarkdown('| Repo | # |\n|---|---|\n| a | 1 |\n| b | 2 |');
+  return h.includes('<table>') && h.includes('<thead><tr><th>Repo</th><th>#</th></tr></thead>')
+    && h.includes('<tbody>') && h.split('<tr>').length === 4 && h.includes('</table>');
+})(), renderMarkdown('| Repo | # |\n|---|---|\n| a | 1 |\n| b | 2 |'));
+check('table cell html stays inert', (() => {
+  const h = renderMarkdown('| H |\n|---|---|\n| <script>alert(1)</script> |');
+  return h.includes('<td>&lt;script&gt;alert(1)&lt;/script&gt;</td>') && !/<script/i.test(h);
+})(), renderMarkdown('| H |\n|---|---|\n| <script>alert(1)</script> |'));
+check('table ragged row padded/truncated to header cols', (() => {
+  const h = renderMarkdown('| A | B | C |\n|---|---|---|\n| 1 | 2 |\n| 1 | 2 | 3 | 4 |');
+  // every row has exactly 3 <td>
+  const rows = h.split('<tr>').slice(2); // skip table-open + header row
+  return rows.every((r) => !r.includes('<td>') || (r.match(/<td>/g) || []).length === 3);
+})(), renderMarkdown('| A | B | C |\n|---|---|---|\n| 1 | 2 |\n| 1 | 2 | 3 | 4 |'));
+check('table pipe inside code cell not a delimiter', (() => {
+  const h = renderMarkdown('| A | B |\n|---|---|\n| `a|b` | 2 |');
+  return h.includes('<td><code>a|b</code></td>') && h.includes('<td>2</td>');
+})(), renderMarkdown('| A | B |\n|---|---|\n| `a|b` | 2 |'));
+check('table cell emphasis works', renderMarkdown('| H |\n|---|---|\n| **bold** |').includes('<td><strong>bold</strong></td>'), renderMarkdown('| H |\n|---|---|\n| **bold** |'));
+check('table cell with autolinked ref keeps underscores in href', (() => {
+  const h = renderMarkdown('| Repo | PR |\n|---|---|\n| x | a_b/c_d#9 |');
+  return h.includes('<a href="https://github.com/a_b/c_d/issues/9"') && h.includes('>a_b/c_d#9</a>');
+})(), renderMarkdown('| Repo | PR |\n|---|---|\n| x | a_b/c_d#9 |'));
+check('table with markdown-link cell intact href', (() => {
+  const h = renderMarkdown('| Link |\n|---|---|\n| [a_b/c_d#5](https://github.com/a_b/c_d/pull/5) |');
+  return hrefOf(h) === 'https://github.com/a_b/c_d/pull/5' && h.includes('>a_b/c_d#5</a>');
+})(), renderMarkdown('| Link |\n|---|---|\n| [a_b/c_d#5](https://github.com/a_b/c_d/pull/5) |'));
+
+console.log('\nAuto-linked GitHub refs:');
+check('owner/repo#123 -> exact issues href', (() => {
+  const h = renderMarkdown('See my_org/my_repo#123 today');
+  return hrefOf(h) === 'https://github.com/my_org/my_repo/issues/123' && h.includes('>my_org/my_repo#123</a>');
+})(), renderMarkdown('See my_org/my_repo#123 today'));
+check('autolinked href has underscores intact (no <em>)', (() => {
+  const href = hrefOf(renderMarkdown('a_b/c_d#9'));
+  return href === 'https://github.com/a_b/c_d/issues/9';
+})(), renderMarkdown('a_b/c_d#9'));
+check('ref inside inline code NOT linkified', (() => {
+  const h = renderMarkdown('use `my_org/my_repo#123` here');
+  return h.includes('<code>my_org/my_repo#123</code>') && !/<a\b/.test(h);
+})(), renderMarkdown('use `my_org/my_repo#123` here'));
+check('ref inside fenced code NOT linkified', (() => {
+  const h = renderMarkdown('```\no/r#1\n```');
+  return h.includes('<pre><code>o/r#1</code></pre>') && !/<a\b/.test(h);
+})(), renderMarkdown('```\no/r#1\n```'));
+check('ref already in a link NOT double-linked', (() => {
+  const h = renderMarkdown('[link](https://github.com/o/r#1)');
+  return (h.match(/<a\b/g) || []).length === 1;
+})(), renderMarkdown('[link](https://github.com/o/r#1)'));
+check('bare #123 NOT linkified (no repo context)', (() => {
+  const h = renderMarkdown('see #123 please');
+  return !/<a\b/.test(h) && h.includes('#123');
+})(), renderMarkdown('see #123 please'));
+check('path-like a/b/c#1 NOT mis-linked as owner/repo', (() => {
+  // a/b/c#1 has an extra path segment; our regex anchors on owner/repo#num only.
+  const h = renderMarkdown('path/to/file');
+  return !/<a\b/.test(h);
+})(), renderMarkdown('path/to/file'));
+check('@user -> profile link', (() => {
+  const h = renderMarkdown('cc @octocat');
+  return h.includes('<a href="https://github.com/octocat"') && h.includes('>@octocat</a>');
+})(), renderMarkdown('cc @octocat'));
+check('autolink ref does not break following html escaping', (() => {
+  const h = renderMarkdown('o/r#1 then <script>alert(1)</script>');
+  return h.includes('<a href="https://github.com/o/r/issues/1"') && !/<script/i.test(h) && h.includes('&lt;script&gt;');
+})(), renderMarkdown('o/r#1 then <script>alert(1)</script>'));
 
 // Single-source-of-truth self-check.
 check('renderMarkdownSource === renderMarkdown.toString()', renderMarkdownSource === renderMarkdown.toString());

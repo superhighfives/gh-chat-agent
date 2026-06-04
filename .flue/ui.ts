@@ -51,6 +51,13 @@ export const CHAT_PAGE_HTML = `<!doctype html>
   .agent pre { background: rgba(127,127,127,0.18); padding: 10px 12px; border-radius: 8px;
     overflow-x: auto; margin: 6px 0; }
   .agent pre code { background: none; padding: 0; white-space: pre; }
+  /* Tables: wider bubble + horizontal scroll so PR/issue lists fit. */
+  .agent:has(table) { max-width: 95%; }
+  .agent table { display: block; overflow-x: auto; border-collapse: collapse; margin: 6px 0;
+    font-size: 0.92em; white-space: normal; }
+  .agent th, .agent td { border: 1px solid var(--line); padding: 5px 9px; text-align: left;
+    vertical-align: top; }
+  .agent thead th { background: rgba(127,127,127,0.16); font-weight: 600; }
   .error { align-self: flex-start; background: var(--errbg); color: var(--err); border: 1px solid var(--err);
     border-radius: 10px; font-size: 13px; }
   .meta { align-self: center; color: var(--muted); font-size: 12px; }
