@@ -6,12 +6,20 @@
  * renders the assistant `text` from the JSON reply. Non-2xx responses (e.g. a
  * missing GITHUB_TOKEN or, in credential-free local dev, no AI binding) are
  * shown inline as an error bubble so the page stays usable without secrets.
+ *
+ * Assistant replies are markdown; they are rendered with the escape-first,
+ * XSS-safe `renderMarkdown` from `./markdown.ts`. That function's own source is
+ * inlined verbatim below (`renderMarkdownSource`) so the browser runs exactly
+ * what the unit test verifies — single source of truth, no drift.
  */
+import { renderMarkdownSource } from './markdown.ts';
+
 export const CHAT_PAGE_HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
 <title>GitHub Chat Agent</title>
 <style>
   :root { color-scheme: light dark; --fg: #1c1c1e; --muted: #6b6b70; --line: #d8d8dc;
@@ -31,6 +39,18 @@ export const CHAT_PAGE_HTML = `<!doctype html>
   .msg { max-width: 80%; padding: 9px 13px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
   .user { align-self: flex-end; background: var(--user); color: #fff; border-bottom-right-radius: 4px; }
   .agent { align-self: flex-start; background: var(--agent); border-bottom-left-radius: 4px; }
+  /* Rendered-markdown elements inside an assistant bubble. */
+  .agent h3, .agent h4, .agent h5 { margin: 6px 0 4px; line-height: 1.3; }
+  .agent h3 { font-size: 1.05em; } .agent h4 { font-size: 1em; } .agent h5 { font-size: 0.95em; }
+  .agent p:first-child, .agent h3:first-child, .agent h4:first-child, .agent h5:first-child { margin-top: 0; }
+  .agent ul, .agent ol { margin: 4px 0; padding-left: 22px; }
+  .agent li { margin: 2px 0; }
+  .agent a { color: var(--user); text-decoration: underline; }
+  .agent code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em;
+    background: rgba(127,127,127,0.18); padding: 1px 5px; border-radius: 5px; }
+  .agent pre { background: rgba(127,127,127,0.18); padding: 10px 12px; border-radius: 8px;
+    overflow-x: auto; margin: 6px 0; }
+  .agent pre code { background: none; padding: 0; white-space: pre; }
   .error { align-self: flex-start; background: var(--errbg); color: var(--err); border: 1px solid var(--err);
     border-radius: 10px; font-size: 13px; }
   .meta { align-self: center; color: var(--muted); font-size: 12px; }
@@ -57,6 +77,10 @@ export const CHAT_PAGE_HTML = `<!doctype html>
   </form>
 </div>
 <script>
+  // Inlined verbatim from .flue/markdown.ts (renderMarkdown.toString()). The
+  // unit test imports the same function, so page and test never drift.
+  ${renderMarkdownSource}
+
   // Stable per-tab session id -> same Durable Object-backed agent instance.
   const session = (() => {
     const key = "gh-chat-session";
@@ -108,7 +132,9 @@ export const CHAT_PAGE_HTML = `<!doctype html>
         // fallbacks for safety.
         text = data.result?.text ?? data.text ?? data.message ?? (typeof data === "string" ? data : raw);
       } catch { /* non-JSON: show raw */ }
-      pending.textContent = text;
+      // Assistant replies are markdown -> render as safe HTML. Errors and all
+      // other bubbles stay on textContent (see add()).
+      pending.innerHTML = renderMarkdown(text);
     } catch (err) {
       pending.remove();
       add("Network error: " + (err && err.message ? err.message : String(err)), "error");
