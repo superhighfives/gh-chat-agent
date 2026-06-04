@@ -103,7 +103,10 @@ export const CHAT_PAGE_HTML = `<!doctype html>
       let text = raw;
       try {
         const data = JSON.parse(raw);
-        text = data.text ?? data.message ?? (typeof data === "string" ? data : raw);
+        // The agent HTTP response is { result: { text, usage, model } }, so the
+        // assistant reply lives at data.result.text. Keep the older shapes as
+        // fallbacks for safety.
+        text = data.result?.text ?? data.text ?? data.message ?? (typeof data === "string" ? data : raw);
       } catch { /* non-JSON: show raw */ }
       pending.textContent = text;
     } catch (err) {
