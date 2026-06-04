@@ -100,6 +100,39 @@ check('safe https link -> anchor with rel', (() => {
   return h.includes('<a href="https://github.com"') && h.includes('rel="noopener noreferrer ugc"') && h.includes('>GitHub</a>');
 })(), renderMarkdown('[GitHub](https://github.com)'));
 check('mailto allowed', renderMarkdown('[mail](mailto:x@y.com)').includes('<a href="mailto:x@y.com"'));
+
+// Regression: emphasis chars inside an href must NOT be transformed. Extract
+// the href value and assert it equals the exact URL byte-for-byte.
+function hrefOf(html) {
+  const m = /<a href="([^"]*)"/.exec(html);
+  return m ? m[1] : null;
+}
+check('href with underscores in org AND repo intact', (() => {
+  const url = 'https://github.com/my_org/my_repo/pull/5';
+  const h = renderMarkdown('[pr](' + url + ')');
+  return hrefOf(h) === url && !/<(em|strong)/.test(h.slice(0, h.indexOf('>') + 1));
+})(), renderMarkdown('[pr](https://github.com/my_org/my_repo/pull/5)'));
+check('href with single _a_ intact', (() => {
+  const url = 'https://a.com/_a_';
+  return hrefOf(renderMarkdown('[x](' + url + ')')) === url;
+})(), renderMarkdown('[x](https://a.com/_a_)'));
+check('href with ** intact', (() => {
+  const url = 'https://a.com/x**y**z';
+  return hrefOf(renderMarkdown('[x](' + url + ')')) === url;
+})(), renderMarkdown('[x](https://a.com/x**y**z)'));
+check('href has no injected emphasis tags', (() => {
+  const h = renderMarkdown('[pr](https://github.com/my_org/my_repo/pull/5)');
+  const href = hrefOf(h);
+  return href !== null && !href.includes('<em') && !href.includes('<strong') && !href.includes('<');
+})());
+check('emphasis still works in link label', (() => {
+  const h = renderMarkdown('[**bold**](https://github.com/a_b)');
+  return h.includes('<strong>bold</strong>') && hrefOf(h) === 'https://github.com/a_b';
+})(), renderMarkdown('[**bold**](https://github.com/a_b)'));
+check('emphasis outside links still works alongside underscore url', (() => {
+  const h = renderMarkdown('see *this* [pr](https://github.com/a_b/c_d/pull/9)');
+  return h.includes('<em>this</em>') && hrefOf(h) === 'https://github.com/a_b/c_d/pull/9';
+})(), renderMarkdown('see *this* [pr](https://github.com/a_b/c_d/pull/9)'));
 check('bold', renderMarkdown('**b**') === '<strong>b</strong>', renderMarkdown('**b**'));
 check('italic', renderMarkdown('*i*') === '<em>i</em>', renderMarkdown('*i*'));
 check('underscore bold', renderMarkdown('__b__') === '<strong>b</strong>', renderMarkdown('__b__'));

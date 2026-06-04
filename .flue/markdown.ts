@@ -46,20 +46,29 @@ export function renderMarkdown(src: string): string {
     return /^(https?:\/\/|mailto:)/i.test(trimmed) ? trimmed : null;
   };
 
+  // Bold then italic. Bold first so ** isn't consumed by the single-* italic rule.
+  const emphasize = (s: string): string =>
+    s
+      .replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^\n]+?)__/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*(?!\s)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/(^|[^_])_(?!\s)([^_\n]+?)_(?![_])/g, '$1<em>$2</em>');
+
   // Links: [label](url). label/url are already escaped; a `"` is &quot; so it
   // can't break out of href="...". Reject non-allowlisted schemes -> plain text.
+  //
+  // The assembled <a> is STASHED into the same placeholder mechanism as code,
+  // so the later document-wide emphasis pass cannot mangle `_`/`*` inside the
+  // href (org/repo/file names use underscores heavily). Emphasis IS still
+  // applied to the label first, so `[**bold**](url)` renders bold.
   text = text.replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_m, label, url) => {
     const href = safeUrl(url);
-    return href === null
-      ? label
-      : '<a href="' + href + '" target="_blank" rel="noopener noreferrer ugc">' + label + '</a>';
+    if (href === null) return emphasize(label); // not a real link -> plain (emphasized) text
+    return stash('<a href="' + href + '" target="_blank" rel="noopener noreferrer ugc">' + emphasize(label) + '</a>');
   });
 
-  // Bold then italic. Bold first so ** isn't consumed by the single-* italic rule.
-  text = text.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/__([^\n]+?)__/g, '<strong>$1</strong>');
-  text = text.replace(/(^|[^*])\*(?!\s)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
-  text = text.replace(/(^|[^_])_(?!\s)([^_\n]+?)_(?![_])/g, '$1<em>$2</em>');
+  // Document-wide emphasis (links are already stashed, so hrefs are untouched).
+  text = emphasize(text);
 
   // Build blocks line by line: headings, ordered/unordered lists, paragraphs.
   const lines = text.split('\n');
@@ -102,7 +111,8 @@ export function renderMarkdown(src: string): string {
   closeList();
   text = out.join('\n');
 
-  // Restore code placeholders (block-level <pre> shouldn't get <br> inside it).
+  // Restore stashed placeholders (code blocks and links). Done after emphasis
+  // so neither hrefs nor code contents were touched by inline transforms.
   text = text.replace(/\0(\d+)\0/g, (_m, i) => codeBlocks[Number(i)]);
 
   // Remaining newlines -> <br>, but not those adjacent to our block tags.
